@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { DashboardLayout } from './components/layout/DashboardLayout.jsx';
 
+import HomePage from './pages/HomePage.jsx';
+
 // Auth pages
 import LoginPage    from './pages/auth/LoginPage.jsx';
 import RegisterPage from './pages/auth/RegisterPage.jsx';
@@ -60,9 +62,11 @@ function PublicOnlyRoute() {
 
 function RootRedirect() {
   const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  const path = user.role === 'admin' ? '/admin/dashboard' : user.role === 'staff' ? '/staff/dashboard' : '/customer/dashboard';
-  return <Navigate to={path} replace />;
+  if (user) {
+    const path = user.role === 'admin' ? '/admin/dashboard' : user.role === 'staff' ? '/staff/dashboard' : '/customer/dashboard';
+    return <Navigate to={path} replace />;
+  }
+  return <HomePage />;
 }
 
 // ──── App ────
