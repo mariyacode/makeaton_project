@@ -12,6 +12,9 @@ def create_app():
     db.init_app(app)
     from app import models
     CORS(app)
+    from app.routes.products import products_bp
+    app.register_blueprint(products_bp)
+
 
     from app.routes.health import health_bp
     app.register_blueprint(health_bp)
