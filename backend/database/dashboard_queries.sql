@@ -164,3 +164,82 @@ SELECT
     COUNT(*) AS total_paid_invoices
 FROM invoices
 WHERE status = 'paid';
+
+-- STEP 20: Count Paid Invoices
+SELECT COUNT(*) AS total_paid_invoices
+FROM invoices
+WHERE status = 'paid';
+
+
+-- STEP 21: Count Overdue Invoices
+SELECT COUNT(*) AS total_overdue_invoices
+FROM invoices
+WHERE status = 'overdue';
+
+
+-- STEP 22: Revenue by Product
+SELECT
+    pr.name AS product_name,
+    COALESCE(SUM(il.line_total), 0) AS total_revenue
+FROM invoice_lines il
+JOIN products pr ON il.product_id = pr.id
+GROUP BY pr.id, pr.name
+ORDER BY total_revenue DESC;
+
+
+-- STEP 23: Most Subscribed Plans
+SELECT
+    pl.name AS plan_name,
+    COUNT(s.id) AS total_subscriptions
+FROM plans pl
+LEFT JOIN subscriptions s ON pl.id = s.plan_id
+GROUP BY pl.id, pl.name
+ORDER BY total_subscriptions DESC
+LIMIT 5;
+
+
+-- STEP 24: Customers Without Active Subscriptions
+SELECT
+    c.id AS customer_id,
+    c.company_name,
+    c.email
+FROM customers c
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM subscriptions s
+    WHERE s.customer_id = c.id
+      AND s.status = 'active'
+)
+ORDER BY c.company_name;
+
+
+-- STEP 25: Average Invoice Amount
+SELECT
+    COALESCE(AVG(total_amount), 0) AS average_invoice_amount
+FROM invoices
+WHERE status != 'cancelled';
+
+
+-- STEP 26: Complete Dashboard Summary
+SELECT
+    (SELECT COUNT(*) FROM customers)
+        AS total_customers,
+
+    (SELECT COUNT(*) FROM subscriptions
+     WHERE status = 'active')
+        AS active_subscriptions,
+
+    (SELECT COUNT(*) FROM invoices)
+        AS total_invoices,
+
+    (SELECT COALESCE(SUM(amount), 0) FROM payments)
+        AS total_revenue_received,
+
+    (SELECT COALESCE(SUM(total_amount - amount_paid), 0)
+     FROM invoices
+     WHERE status NOT IN ('paid', 'cancelled'))
+        AS outstanding_amount,
+
+    (SELECT COUNT(*) FROM invoices
+     WHERE status = 'overdue')
+        AS overdue_invoices;
