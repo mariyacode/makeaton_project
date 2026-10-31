@@ -10,6 +10,7 @@ import { Button }      from '../../components/common/Button.jsx';
 import { InputField }  from '../../components/common/InputField.jsx';
 import { EmptyState }  from '../../components/common/EmptyState.jsx';
 import { mockCustomers } from '../../data/mockData.js';
+import { useCollection } from '../../hooks/useCollection.js';
 
 /* ── Avatar helper ── */
 function CustomerAvatar({ name }) {
@@ -135,7 +136,7 @@ function ViewModal({ open, onClose, customer }) {
    Main Page Component
    ══════════════════════════════ */
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState(mockCustomers);
+  const { items: customers, loading, error, create, update, remove } = useCollection('customers', mockCustomers);
   const [search,    setSearch]    = useState('');
   const [statusFilter, setStatus] = useState('all');
   const [addOpen,   setAddOpen]   = useState(false);
@@ -159,15 +160,15 @@ export default function CustomersPage() {
   }, [customers, search, statusFilter]);
 
   /* ── Handlers ── */
-  const handleAdd = (form) => {
-    setCustomers(prev => [...prev, { id:`c${Date.now()}`, ...form, joinedAt: new Date().toISOString().split('T')[0], totalSpent: 0 }]);
+  const handleAdd = async (form) => {
+    await create({ ...form, joinedAt: new Date().toISOString().split('T')[0], totalSpent: 0 });
   };
-  const handleEdit = (form) => {
-    setCustomers(prev => prev.map(c => c.id === editItem.id ? { ...c, ...form } : c));
+  const handleEdit = async (form) => {
+    await update(editItem.id, form);
     setEditItem(null);
   };
-  const handleDelete = () => {
-    setCustomers(prev => prev.filter(c => c.id !== deleteItem.id));
+  const handleDelete = async () => {
+    await remove(deleteItem.id);
     setDeleteItem(null);
   };
 
@@ -269,10 +270,13 @@ export default function CustomersPage() {
         </div>
       </div>
 
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+
       {/* Table */}
       <DataTable
         columns={columns}
         data={filtered}
+        loading={loading}
         emptyTitle="No customers found"
         emptyDesc="Try adjusting your search or filters, or add a new customer."
         emptyIcon={UserPlus}

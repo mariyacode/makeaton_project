@@ -111,10 +111,29 @@ Dashboard → Browse Plans → My Subscriptions → My Invoices → Payment Hist
 
 ## Architecture Notes
 
-- **Mock Data**: All data lives in `src/data/mockData.js`. Replace service calls in `src/services/` with real API calls when the backend is ready.
-- **Auth**: `authService.js` uses localStorage for sessions. Replace with JWT/cookie auth later.
+- **Demo Data**: The app starts with the records in `src/data/mockData.js` and persists changes in localStorage when no API URL is configured.
+- **API**: Set `VITE_API_URL` in a local `.env` file to enable REST requests. See `.env.example` for the expected variable.
+- **Auth**: The demo login uses local mock credentials. With an API URL configured, auth calls `/auth/login` and `/auth/register`, and uses a returned bearer token for subsequent API calls.
 - **Route Guards**: `ProtectedRoute` in `App.jsx` enforces role-based access. Unauthenticated users are redirected to `/login`.
 - **Styling**: Pure CSS with CSS variables — no Tailwind dependency. Easy to theme or override.
+
+### Backend Contract
+
+The frontend expects JSON REST endpoints beneath `VITE_API_URL`:
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/auth/login` | Accept `{ "email": "...", "password": "..." }`; return `{ "user": { "id", "name", "email", "role" }, "token": "..." }` |
+| `POST` | `/auth/register` | Accept `{ "fullName": "...", "email": "...", "password": "..." }`; return the same auth response |
+| `PATCH` | `/auth/profile` | Accept updated `{ "name": "...", "email": "..." }`; return the updated user or `{ "user": { ... } }` |
+| `GET` | `/customers`, `/products`, `/plans`, `/subscriptions`, `/invoices`, `/payments`, `/staff` | Return an array or `{ "data": [] }` |
+| `POST` | `/<collection>` | Create a record and return it, including its `id` |
+| `PATCH` | `/<collection>/:id` | Update a record and return it |
+| `DELETE` | `/<collection>/:id` | Delete a record; a `204` response is supported |
+| `POST` | `/checkout` | Accept `{ "planId": "...", "paymentMethod": "..." }`; securely process payment and return linked subscription, invoice, and payment records |
+| `POST` | `/payments` | Accept `{ "invoiceId": "...", "paymentMethod": "..." }`; securely collect payment and return the payment record |
+
+The app never collects or stores raw card numbers. Real payment processing must be implemented by the backend with a payment provider. Without `VITE_API_URL`, checkout is explicitly a demo flow and records a test payment locally.
 
 ---
 
@@ -137,12 +156,12 @@ Dashboard → Browse Plans → My Subscriptions → My Invoices → Payment Hist
 
 ## What's Next (Phase 2+)
 
-- [ ] Customers CRUD page
-- [ ] Products & Plans management
-- [ ] Subscriptions management with status updates
-- [ ] Invoice generation & view
-- [ ] Payment flow
-- [ ] Customer Plan Browsing page
-- [ ] Analytics page with deeper charts
-- [ ] Staff Management page
-- [ ] Real backend API integration
+- [x] Customers CRUD page
+- [x] Products & Plans management
+- [x] Subscriptions management with status updates
+- [x] Invoice generation & view
+- [x] Payment flow (demo locally; server-backed when configured)
+- [x] Customer Plan Browsing page
+- [x] Analytics page with deeper charts
+- [x] Staff Management page
+- [x] Configurable REST API integration (requires a compatible backend)
