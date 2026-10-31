@@ -7,8 +7,9 @@ import {
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { mockRevenueData, mockSubscriptionGrowth, mockPlans, mockSubscriptions } from '../../data/mockData.js';
+import { mockPlans, mockSubscriptions, mockPayments } from '../../data/mockData.js';
 import { TrendingUp, TrendingDown } from 'lucide-react';
+import { useCollection } from '../../hooks/useCollection.js';
 
 const COLORS = ['#2563EB', '#16A34A', '#F59E0B', '#7C3AED', '#DC2626'];
 
@@ -50,27 +51,42 @@ function CustomTooltip({ active, payload, label, prefix = '' }) {
   );
 }
 
-// Plan distribution for pie chart
-const planDistData = [
-  { name:'Starter',      value:2 },
-  { name:'Professional', value:3 },
-  { name:'Enterprise',   value:1 },
-];
-
-// MRR progression
-const mrrData = [
-  { month:'May', mrr:1499 },
-  { month:'Jun', mrr:1849 },
-  { month:'Jul', mrr:1749 },
-  { month:'Aug', mrr:2398 },
-  { month:'Sep', mrr:2298 },
-  { month:'Oct', mrr:2748 },
-];
-
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState('6m');
-
-  const data = mockRevenueData;
+  const subscriptions = useCollection('subscriptions', mockSubscriptions).items;
+  const plans = useCollection('plans', mockPlans).items;
+  const payments = useCollection('payments', mockPayments).items;
+  const monthCount = period === '1m' ? 1 : period === '3m' ? 3 : period === '1y' ? 12 : 6;
+  const months = Array.from({ length: monthCount }, (_, index) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (monthCount - index - 1), 1);
+    return date;
+  });
+  const monthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const chartData = months.map((date) => {
+    const key = monthKey(date);
+    const monthPayments = payments.filter((payment) => payment.status === 'success' && payment.processedAt?.slice(0, 7) === key);
+    const started = subscriptions.filter((subscription) => subscription.startDate?.slice(0, 7) === key);
+    return {
+      month: date.toLocaleString('en-US', { month: 'short' }),
+      revenue: monthPayments.reduce((sum, payment) => sum + Number(payment.amount), 0),
+      subscriptions: started.length,
+      active: subscriptions.filter((subscription) => ['active', 'trialing'].includes(subscription.status) && subscription.startDate <= `${key}-31`).length,
+      new: started.length,
+      cancelled: subscriptions.filter((subscription) => subscription.status === 'cancelled' && subscription.cancelledAt?.slice(0, 7) === key).length,
+    };
+  });
+  const activeSubscriptions = subscriptions.filter((subscription) => ['active', 'trialing'].includes(subscription.status));
+  const mrr = activeSubscriptions.reduce((sum, subscription) => sum + Number(subscription.amount) / (subscription.billingCycle === 'annual' ? 12 : subscription.billingCycle === 'weekly' ? 0.23 : 1), 0);
+  const revenueByPlan = plans.map((plan) => ({
+    name: plan.name,
+    revenue: activeSubscriptions.filter((subscription) => subscription.planId === plan.id).reduce((sum, subscription) => sum + Number(subscription.amount) / (subscription.billingCycle === 'annual' ? 12 : subscription.billingCycle === 'weekly' ? 0.23 : 1), 0),
+    color: plan.color || COLORS[plans.indexOf(plan) % COLORS.length],
+  })).filter((item) => item.revenue > 0);
+  const planDistData = revenueByPlan.map((item) => ({ name: item.name, value: activeSubscriptions.filter((subscription) => plans.find((plan) => plan.name === item.name)?.id === subscription.planId).length }));
+  const maxPlanRevenue = Math.max(1, ...revenueByPlan.map((item) => item.revenue));
+  const churnRate = subscriptions.length ? (subscriptions.filter((subscription) => subscription.status === 'cancelled').length / subscriptions.length) * 100 : 0;
+  const avgRevenue = subscriptions.length ? mrr / subscriptions.length : 0;
 
   return (
     <div className="animate-fade-in">
@@ -89,17 +105,17 @@ export default function AnalyticsPage() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-4" style={{ marginBottom:'1.75rem' }}>
-        <KPICard label="Monthly Recurring Revenue" value={2748} change={+18.5} prefix="$" />
-        <KPICard label="Active Subscriptions"       value={5}     change={+12}   />
-        <KPICard label="Churn Rate"                 value="2.1%"  change={-0.4}  />
-        <KPICard label="Avg Revenue per User"        value={134.9} change={+5.2}  prefix="$" />
+        <KPICard label="Monthly Recurring Revenue" value={mrr} change={0} prefix="$" />
+        <KPICard label="Active Subscriptions"       value={activeSubscriptions.length} change={0} />
+        <KPICard label="Churn Rate"                 value={`${churnRate.toFixed(1)}%`} change={0} />
+        <KPICard label="Avg Revenue per User"        value={avgRevenue} change={0} prefix="$" />
       </div>
 
       {/* Revenue + MRR */}
       <div className="grid grid-cols-2" style={{ marginBottom:'1.5rem' }}>
         <ChartCard title="Revenue Overview" badge="6 months">
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={data}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="revenueGradA" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor="#2563EB" stopOpacity={0.15}/>
@@ -117,7 +133,7 @@ export default function AnalyticsPage() {
 
         <ChartCard title="MRR Growth" badge="Monthly">
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={mrrData}>
+            <LineChart data={chartData.map((item) => ({ ...item, mrr: item.active * (activeSubscriptions.length ? mrr / activeSubscriptions.length : 0) }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false}/>
               <XAxis dataKey="month" tick={{ fontSize:12, fill:'var(--text-secondary)' }} axisLine={false} tickLine={false}/>
               <YAxis tick={{ fontSize:12, fill:'var(--text-secondary)' }} axisLine={false} tickLine={false} tickFormatter={v=>`$${v}`}/>
@@ -132,7 +148,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-2" style={{ marginBottom:'1.5rem' }}>
         <ChartCard title="Subscription Growth">
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={mockSubscriptionGrowth}>
+            <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false}/>
               <XAxis dataKey="month" tick={{ fontSize:12, fill:'var(--text-secondary)' }} axisLine={false} tickLine={false}/>
               <YAxis tick={{ fontSize:12, fill:'var(--text-secondary)' }} axisLine={false} tickLine={false}/>
@@ -156,7 +172,7 @@ export default function AnalyticsPage() {
               </PieChart>
             </ResponsiveContainer>
             <div style={{ flex:1 }}>
-              {planDistData.map((item, i) => (
+                {planDistData.map((item, i) => (
                 <div key={item.name} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0', borderBottom:'1px solid var(--border)' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
                     <div style={{ width:12, height:12, borderRadius:3, background:COLORS[i%COLORS.length], flexShrink:0 }}/>
@@ -176,11 +192,7 @@ export default function AnalyticsPage() {
           <span className="card-title">Revenue by Plan</span>
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:'1rem' }}>
-          {[
-            { name:'Enterprise', revenue:399.98, max:600, color:'#7C3AED' },
-            { name:'Professional', revenue:149.97, max:600, color:'#2563EB' },
-            { name:'Starter', revenue:19.98, max:600, color:'#16A34A' },
-          ].map(item => (
+          {revenueByPlan.map(item => (
             <div key={item.name} className="progress-bar-wrapper">
               <div className="progress-bar-label">
                 <span>{item.name}</span>
@@ -189,7 +201,7 @@ export default function AnalyticsPage() {
               <div className="progress-bar-track">
                 <div
                   className="progress-bar-fill"
-                  style={{ width:`${(item.revenue/item.max)*100}%`, background:item.color }}
+                  style={{ width:`${(item.revenue/maxPlanRevenue)*100}%`, background:item.color }}
                 />
               </div>
             </div>

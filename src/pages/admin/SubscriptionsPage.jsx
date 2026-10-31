@@ -9,6 +9,7 @@ import { Modal }           from '../../components/common/Modal.jsx';
 import { Button }          from '../../components/common/Button.jsx';
 import { EmptyState }      from '../../components/common/EmptyState.jsx';
 import { mockSubscriptions, mockPlans } from '../../data/mockData.js';
+import { useCollection } from '../../hooks/useCollection.js';
 
 function ViewSubModal({ open, onClose, sub }) {
   if (!sub) return null;
@@ -63,7 +64,7 @@ function CancelModal({ open, onClose, sub, onConfirm }) {
 }
 
 export default function SubscriptionsPage() {
-  const [subs, setSubs]         = useState(mockSubscriptions);
+  const { items: subs, loading, error, update } = useCollection('subscriptions', mockSubscriptions);
   const [search, setSearch]     = useState('');
   const [statusFilter, setStatus] = useState('all');
   const [planFilter, setPlan]   = useState('all');
@@ -81,14 +82,13 @@ export default function SubscriptionsPage() {
     return data;
   }, [subs, search, statusFilter, planFilter]);
 
-  const handleCancel = () => {
-    setSubs(prev => prev.map(s => s.id === cancelItem.id ? { ...s, status:'cancelled', nextBillingDate:null } : s));
+  const handleCancel = async () => {
+    await update(cancelItem.id, { status:'cancelled', nextBillingDate:null });
     setCancel(null);
   };
 
-  const handleReactivate = (sub) => {
-    const plan = mockPlans.find(p => p.id === sub.planId);
-    setSubs(prev => prev.map(s => s.id === sub.id ? { ...s, status:'active', nextBillingDate: '2026-12-01' } : s));
+  const handleReactivate = async (sub) => {
+    await update(sub.id, { status:'active', nextBillingDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10) });
   };
 
   const columns = [
@@ -151,6 +151,8 @@ export default function SubscriptionsPage() {
         </div>
       </div>
 
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+
       {/* Summary pills */}
       <div style={{ display:'flex', gap:'0.75rem', marginBottom:'1.5rem', flexWrap:'wrap' }}>
         {[
@@ -189,7 +191,7 @@ export default function SubscriptionsPage() {
         </div>
       </div>
 
-      <DataTable columns={columns} data={filtered} emptyTitle="No subscriptions found" emptyDesc="Try adjusting your filters." emptyIcon={CreditCard} />
+      <DataTable columns={columns} data={filtered} loading={loading} emptyTitle="No subscriptions found" emptyDesc="Try adjusting your filters." emptyIcon={CreditCard} />
 
       <ViewSubModal   open={!!viewItem}  onClose={() => setViewItem(null)} sub={viewItem} />
       <CancelModal    open={!!cancelItem} onClose={() => setCancel(null)}  sub={cancelItem} onConfirm={handleCancel} />

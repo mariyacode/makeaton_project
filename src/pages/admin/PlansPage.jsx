@@ -7,7 +7,8 @@ import { StatusBadge } from '../../components/common/StatusBadge.jsx';
 import { Modal }       from '../../components/common/Modal.jsx';
 import { Button }      from '../../components/common/Button.jsx';
 import { InputField }  from '../../components/common/InputField.jsx';
-import { mockPlans }   from '../../data/mockData.js';
+import { mockPlans, mockProducts } from '../../data/mockData.js';
+import { useCollection } from '../../hooks/useCollection.js';
 
 const CYCLE_LABELS = { monthly:'Monthly', annual:'Annual', weekly:'Weekly' };
 
@@ -97,8 +98,8 @@ function PlanCard({ plan, onEdit, onDelete, onToggle }) {
   );
 }
 
-function PlanModal({ open, onClose, initial, onSave }) {
-  const blank = { name: '', price: '', billingCycle: 'monthly', trialDays: 0, features: '', status: 'active', popular: false, color: '#2563EB' };
+function PlanModal({ open, onClose, initial, onSave, products }) {
+  const blank = { name: '', productId: '', price: '', currency: 'USD', billingCycle: 'monthly', trialDays: 0, features: '', status: 'active', popular: false, color: '#2563EB' };
   const [form, setForm] = useState(blank);
 
   React.useEffect(() => {
@@ -134,6 +135,13 @@ function PlanModal({ open, onClose, initial, onSave }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <InputField id="plan-name"  label="Plan Name"   value={form.name}  onChange={set('name')}  placeholder="Starter" />
           <InputField id="plan-price" label="Price (USD)" value={form.price} onChange={set('price')} type="number" placeholder="9.99" />
+        </div>
+        <div className="input-group">
+          <label className="input-label" htmlFor="plan-product">Product</label>
+          <select id="plan-product" className="select input" value={form.productId} onChange={set('productId')}>
+            <option value="">Select a product</option>
+            {products.filter((product) => product.status === 'active').map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+          </select>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <div className="input-group">
@@ -180,26 +188,27 @@ function PlanModal({ open, onClose, initial, onSave }) {
 }
 
 export default function PlansPage() {
-  const [plans, setPlans]     = useState(mockPlans);
+  const { items: plans, loading, error, create, update, remove } = useCollection('plans', mockPlans);
+  const products = useCollection('products', mockProducts);
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem]= useState(null);
   const [deleteItem, setDelete]= useState(null);
 
-  const handleSave = (form) => {
+  const handleSave = async (form) => {
     if (editItem) {
-      setPlans(prev => prev.map(p => p.id === editItem.id ? { ...p, ...form } : p));
+      await update(editItem.id, form);
       setEditItem(null);
     } else {
-      setPlans(prev => [...prev, { id: `plan${Date.now()}`, ...form }]);
+      await create(form);
     }
   };
 
-  const handleToggle = (plan) => {
-    setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, status: p.status === 'active' ? 'inactive' : 'active' } : p));
+  const handleToggle = async (plan) => {
+    await update(plan.id, { status: plan.status === 'active' ? 'inactive' : 'active' });
   };
 
-  const handleDelete = () => {
-    setPlans(prev => prev.filter(p => p.id !== deleteItem.id));
+  const handleDelete = async () => {
+    await remove(deleteItem.id);
     setDelete(null);
   };
 
@@ -215,8 +224,10 @@ export default function PlansPage() {
         </Button>
       </div>
 
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+
       <div className="grid grid-cols-3" style={{ marginBottom: '1.5rem' }}>
-        {plans.map(plan => (
+        {loading ? <div className="card">Loading plans...</div> : plans.map(plan => (
           <PlanCard
             key={plan.id}
             plan={plan}
@@ -227,7 +238,7 @@ export default function PlansPage() {
         ))}
       </div>
 
-      <PlanModal open={addOpen || !!editItem} onClose={() => { setAddOpen(false); setEditItem(null); }} initial={editItem} onSave={handleSave} />
+      <PlanModal open={addOpen || !!editItem} onClose={() => { setAddOpen(false); setEditItem(null); }} initial={editItem} onSave={handleSave} products={products.items} />
 
       <Modal
         isOpen={!!deleteItem}

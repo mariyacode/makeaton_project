@@ -2,6 +2,7 @@
 // Auth Service – replaces this with real API calls later
 // ============================================================
 import { mockUsers } from '../data/mockData.js';
+import { apiClient } from './apiClient.js';
 
 const AUTH_KEY = 'subsync_auth';
 
@@ -10,6 +11,11 @@ export const authService = {
    * Simulate login – returns user object or throws error
    */
   login: async (email, password) => {
+    if (apiClient.configured) {
+      const user = await apiClient.login({ email, password });
+      localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+      return user;
+    }
     // Simulate network delay
     await new Promise((res) => setTimeout(res, 600));
 
@@ -31,6 +37,11 @@ export const authService = {
    * Simulate registration
    */
   register: async ({ fullName, email, password }) => {
+    if (apiClient.configured) {
+      const user = await apiClient.register({ fullName, email, password });
+      localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+      return user;
+    }
     await new Promise((res) => setTimeout(res, 800));
 
     const exists = mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
@@ -58,11 +69,24 @@ export const authService = {
     return newUser;
   },
 
+  updateProfile: async (changes) => {
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) throw new Error('You must be signed in to update your profile.');
+
+    const result = apiClient.configured
+      ? await apiClient.request('/auth/profile', { method: 'PATCH', body: changes })
+      : changes;
+    const updatedUser = { ...currentUser, ...(result?.user || result), initials: initialsFor(result?.user?.name || result?.name || changes.name) };
+    localStorage.setItem(AUTH_KEY, JSON.stringify(updatedUser));
+    return updatedUser;
+  },
+
   /**
    * Logout – clears session
    */
   logout: () => {
     localStorage.removeItem(AUTH_KEY);
+    apiClient.clearToken();
   },
 
   /**
@@ -84,3 +108,7 @@ export const authService = {
     return !!authService.getCurrentUser();
   },
 };
+
+function initialsFor(name = '') {
+  return name.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').toUpperCase().slice(0, 2);
+}

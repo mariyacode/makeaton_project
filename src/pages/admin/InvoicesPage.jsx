@@ -2,12 +2,13 @@
 // Invoices Page  (Admin + Staff)
 // ============================================================
 import React, { useState, useMemo } from 'react';
-import { FileText, Search, Eye, Download, Send, CheckCircle } from 'lucide-react';
+import { FileText, Search, Eye, Download, Send, CheckCircle, Plus } from 'lucide-react';
 import { DataTable }   from '../../components/common/DataTable.jsx';
 import { StatusBadge } from '../../components/common/StatusBadge.jsx';
 import { Modal }       from '../../components/common/Modal.jsx';
 import { Button }      from '../../components/common/Button.jsx';
-import { mockInvoices } from '../../data/mockData.js';
+import { mockInvoices, mockSubscriptions } from '../../data/mockData.js';
+import { useCollection } from '../../hooks/useCollection.js';
 
 function InvoiceDetailModal({ open, onClose, invoice, onMarkPaid }) {
   if (!invoice) return null;
@@ -84,10 +85,13 @@ function InvoiceDetailModal({ open, onClose, invoice, onMarkPaid }) {
 }
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices]   = useState(mockInvoices);
+  const { items: invoices, loading, error, create, update } = useCollection('invoices', mockInvoices);
+  const subscriptions = useCollection('subscriptions', mockSubscriptions);
   const [search, setSearch]       = useState('');
   const [statusFilter, setStatus] = useState('all');
   const [viewItem, setViewItem]   = useState(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [subscriptionId, setSubscriptionId] = useState('');
 
   const filtered = useMemo(() => {
     let data = invoices;
@@ -99,9 +103,30 @@ export default function InvoicesPage() {
     return data;
   }, [invoices, search, statusFilter]);
 
-  const handleMarkPaid = (invoice) => {
-    setInvoices(prev => prev.map(i => i.id === invoice.id ? { ...i, status:'paid', paidAt: new Date().toISOString().split('T')[0] } : i));
+  const handleMarkPaid = async (invoice) => {
+    await update(invoice.id, { status:'paid', paidAt: new Date().toISOString().split('T')[0] });
     setViewItem(null);
+  };
+
+  const handleGenerate = async () => {
+    const subscription = subscriptions.items.find((item) => item.id === subscriptionId);
+    if (!subscription) return;
+    const issuedAt = new Date().toISOString().slice(0, 10);
+    const dueDate = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    await create({
+      subscriptionId: subscription.id,
+      customerId: subscription.customerId,
+      customerName: subscription.customerName,
+      amount: Number(subscription.amount),
+      currency: subscription.currency || 'USD',
+      status: 'pending',
+      issuedAt,
+      dueDate,
+      paidAt: null,
+      planName: subscription.planName,
+    });
+    setGenerateOpen(false);
+    setSubscriptionId('');
   };
 
   const totals = {
@@ -160,7 +185,10 @@ export default function InvoicesPage() {
           <h1 className="page-title">Invoices</h1>
           <p className="page-subtitle">{invoices.length} total invoices</p>
         </div>
+        <Button leftIcon={<Plus size={16} />} onClick={() => setGenerateOpen(true)}>Generate invoice</Button>
       </div>
+
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       {/* Summary cards */}
       <div className="grid grid-cols-3" style={{ marginBottom:'1.5rem' }}>
@@ -193,9 +221,13 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <DataTable columns={columns} data={filtered} emptyTitle="No invoices found" emptyDesc="No invoices match your current filters." emptyIcon={FileText} />
+      <DataTable columns={columns} data={filtered} loading={loading} emptyTitle="No invoices found" emptyDesc="No invoices match your current filters." emptyIcon={FileText} />
 
       <InvoiceDetailModal open={!!viewItem} onClose={()=>setViewItem(null)} invoice={viewItem} onMarkPaid={handleMarkPaid} />
+      <Modal isOpen={generateOpen} onClose={() => setGenerateOpen(false)} title="Generate invoice" footer={<><Button variant="secondary" onClick={() => setGenerateOpen(false)}>Cancel</Button><Button disabled={!subscriptionId} onClick={handleGenerate}>Create invoice</Button></>}>
+        <div className="input-group"><label htmlFor="invoice-subscription" className="input-label">Subscription</label><select id="invoice-subscription" className="select input" value={subscriptionId} onChange={(event) => setSubscriptionId(event.target.value)}><option value="">Choose a subscription</option>{subscriptions.items.filter((item) => ['active', 'trialing'].includes(item.status)).map((item) => <option key={item.id} value={item.id}>{item.customerName} · {item.planName} · ${Number(item.amount).toFixed(2)}</option>)}</select></div>
+        {subscriptions.error && <div className="inline-error" role="alert">{subscriptions.error}</div>}
+      </Modal>
     </div>
   );
 }

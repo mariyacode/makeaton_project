@@ -8,6 +8,7 @@ import { StatusBadge } from '../../components/common/StatusBadge.jsx';
 import { Modal }       from '../../components/common/Modal.jsx';
 import { Button }      from '../../components/common/Button.jsx';
 import { mockPayments } from '../../data/mockData.js';
+import { useCollection } from '../../hooks/useCollection.js';
 
 const METHOD_ICONS = {
   'Credit Card':   '💳',
@@ -40,12 +41,13 @@ function PaymentDetailModal({ open, onClose, payment }) {
 }
 
 export default function PaymentsPage() {
+  const { items: payments, loading, error } = useCollection('payments', mockPayments);
   const [search, setSearch]   = useState('');
   const [methodFilter, setMethod] = useState('all');
   const [viewItem, setViewItem]   = useState(null);
 
   const filtered = useMemo(() => {
-    let data = mockPayments;
+    let data = payments;
     if (methodFilter !== 'all') data = data.filter(p => p.method === methodFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -55,9 +57,9 @@ export default function PaymentsPage() {
       );
     }
     return data;
-  }, [search, methodFilter]);
+  }, [payments, search, methodFilter]);
 
-  const totalRevenue = mockPayments.filter(p=>p.status==='success').reduce((s,p)=>s+p.amount, 0);
+  const totalRevenue = payments.filter(p=>p.status==='success').reduce((s,p)=>s+p.amount, 0);
 
   const columns = [
     {
@@ -109,7 +111,7 @@ export default function PaymentsPage() {
       <div className="page-header">
         <div className="page-header-left">
           <h1 className="page-title">Payments</h1>
-          <p className="page-subtitle">{mockPayments.length} transactions recorded</p>
+          <p className="page-subtitle">{payments.length} transactions recorded</p>
         </div>
       </div>
 
@@ -118,16 +120,16 @@ export default function PaymentsPage() {
         <div className="card" style={{ borderLeft:'4px solid var(--success)' }}>
           <div style={{ fontSize:'0.8125rem', fontWeight:500, color:'var(--text-secondary)', marginBottom:'0.5rem' }}>Total Revenue</div>
           <div style={{ fontSize:'1.75rem', fontWeight:800, color:'var(--text-main)' }}>${totalRevenue.toFixed(2)}</div>
-          <div style={{ fontSize:'0.8125rem', color:'var(--text-secondary)', marginTop:'0.375rem' }}>{mockPayments.filter(p=>p.status==='success').length} successful payments</div>
+          <div style={{ fontSize:'0.8125rem', color:'var(--text-secondary)', marginTop:'0.375rem' }}>{payments.filter(p=>p.status==='success').length} successful payments</div>
         </div>
         <div className="card" style={{ borderLeft:'4px solid var(--primary)' }}>
           <div style={{ fontSize:'0.8125rem', fontWeight:500, color:'var(--text-secondary)', marginBottom:'0.5rem' }}>This Month</div>
-          <div style={{ fontSize:'1.75rem', fontWeight:800, color:'var(--text-main)' }}>$249.98</div>
-          <div style={{ fontSize:'0.8125rem', color:'var(--success)', marginTop:'0.375rem' }}>↑ 18.5% vs last month</div>
+          <div style={{ fontSize:'1.75rem', fontWeight:800, color:'var(--text-main)' }}>${payments.filter((payment) => payment.status === 'success' && payment.processedAt?.slice(0, 7) === new Date().toISOString().slice(0, 7)).reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2)}</div>
+          <div style={{ fontSize:'0.8125rem', color:'var(--text-secondary)', marginTop:'0.375rem' }}>Successful payments this month</div>
         </div>
         <div className="card" style={{ borderLeft:'4px solid var(--warning)' }}>
           <div style={{ fontSize:'0.8125rem', fontWeight:500, color:'var(--text-secondary)', marginBottom:'0.5rem' }}>Avg Transaction</div>
-          <div style={{ fontSize:'1.75rem', fontWeight:800, color:'var(--text-main)' }}>${(totalRevenue / mockPayments.length).toFixed(2)}</div>
+          <div style={{ fontSize:'1.75rem', fontWeight:800, color:'var(--text-main)' }}>${(totalRevenue / Math.max(1, payments.filter(p=>p.status==='success').length)).toFixed(2)}</div>
           <div style={{ fontSize:'0.8125rem', color:'var(--text-secondary)', marginTop:'0.375rem' }}>per transaction</div>
         </div>
       </div>
@@ -148,7 +150,8 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      <DataTable columns={columns} data={filtered} emptyTitle="No payments found" emptyDesc="No payment records match your search." emptyIcon={DollarSign} />
+      {error && <div className="inline-error" role="alert">{error}</div>}
+      <DataTable columns={columns} data={filtered} loading={loading} emptyTitle="No payments found" emptyDesc="No payment records match your search." emptyIcon={DollarSign} />
 
       <PaymentDetailModal open={!!viewItem} onClose={()=>setViewItem(null)} payment={viewItem} />
     </div>
