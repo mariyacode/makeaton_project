@@ -124,3 +124,43 @@ SELECT
 FROM subscriptions
 GROUP BY status
 ORDER BY total_subscriptions DESC;
+
+SELECT
+    c.id AS customer_id,
+    c.company_name,
+    COALESCE(SUM(p.amount), 0) AS total_revenue
+FROM customers c
+JOIN invoices i
+    ON c.id = i.customer_id
+JOIN payments p
+    ON i.id = p.invoice_id
+GROUP BY c.id, c.company_name
+ORDER BY total_revenue DESC
+LIMIT 5;
+
+SELECT
+    COALESCE(SUM(amount), 0) AS revenue_received_today
+FROM payments
+WHERE payment_date::DATE = CURRENT_DATE;
+
+SELECT
+    COALESCE(SUM(amount), 0) AS revenue_received_this_month
+FROM payments
+WHERE payment_date >= DATE_TRUNC('month', CURRENT_DATE)
+  AND payment_date < DATE_TRUNC('month', CURRENT_DATE)
+                            + INTERVAL '1 month';
+
+SELECT
+    COUNT(*) AS total_draft_invoices
+FROM invoices
+WHERE status = 'draft';
+
+SELECT
+    COUNT(*) AS total_confirmed_invoices
+FROM invoices
+WHERE status = 'confirmed';
+
+SELECT
+    COUNT(*) AS total_paid_invoices
+FROM invoices
+WHERE status = 'paid';
